@@ -103,3 +103,13 @@ export const updateName = TryCatch(async (req: AuthenticatedRequest, res: Respon
         token,
     });
 });
+
+export const getAllUsers = TryCatch(async (req: AuthenticatedRequest, res: Response) => {
+    const users = await User.find();
+    res.json(users);
+})
+
+export const getAUser = TryCatch(async (req: AuthenticatedRequest, res: Response) => {
+    const user = await User.findById(req.params.id);
+    res.json(user);
+})
