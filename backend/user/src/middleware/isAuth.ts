@@ -4,7 +4,7 @@ import jwt, { JwtPayload } from "jsonwebtoken";
 
 
 export interface AuthenticatedRequest extends Request {
-    user: IUser | null;
+    user?: IUser | null;
 }
 
 export const isAuth = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
