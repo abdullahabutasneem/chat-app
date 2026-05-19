@@ -1,7 +1,8 @@
+import { redirect } from 'next/navigation';
 import React from 'react'
 
 const page = () => {
-  return <div>Page</div>
+  return redirect('/chat');
 };
 
 export default page;
