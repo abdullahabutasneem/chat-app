@@ -1,5 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
+import cors from "cors";
 import connectDB from "./config/db.js";
 import { createClient } from "redis";
 import userRoutes from "./routes/user.js";
@@ -16,6 +17,7 @@ redisClient.connect().then(() => {
     console.log("Failed to connect to Redis", err);
 });
 const app = express();
+app.use(cors());
 app.use(express.json());
 app.use("/api/v1", userRoutes);
 const PORT = process.env.PORT || 5000;
