@@ -1,7 +1,7 @@
 'use client';
 
 import axios from 'axios';
-import { ArrowRight, Mail } from 'lucide-react';
+import { ArrowRight, Loader2, Mail } from 'lucide-react';
 import { redirect, useRouter } from 'next/navigation';
 import React, { useState } from 'react'
 
@@ -51,11 +51,23 @@ const LoginPage = () => {
                         required
                         />
                     </div>
-                    <button type='submit' className='w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed'>
-                        <div className='flex items-center justify-center gap-2'>
-                            <span>Send Verification Code</span>
-                            <ArrowRight size={20} className='w-5 h-5' />
-                        </div>
+                    <button type='submit' 
+                    className='w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold 
+                    rounded-lg disabled:opacity-50 disabled:cursor-not-allowed'
+                    disabled={loading}>
+                        {
+                            loading ? (
+                                <div className='flex items-center justify-center gap-2'>
+                                    <Loader2 size={20} className='w-5 h-5 animate-spin' />
+                                    Sending OTP to your mail...
+                                </div>
+                            ) : (
+                                <div className='flex items-center justify-center gap-2'>
+                                    <span>Send Verification Code</span>
+                                    <ArrowRight size={20} className='w-5 h-5' />
+                                </div>
+                            )
+                        }
                     </button>
                 </form>
             </div>
