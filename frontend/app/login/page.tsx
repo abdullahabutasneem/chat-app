@@ -1,8 +1,31 @@
+'use client';
+
+import axios from 'axios';
 import { ArrowRight, Mail } from 'lucide-react';
-import { redirect } from 'next/navigation';
-import React from 'react'
+import { redirect, useRouter } from 'next/navigation';
+import React, { useState } from 'react'
 
 const LoginPage = () => {
+  const [email, setEmail] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+        const {data} = await axios.post(`http://localhost:5000/api/user/login`, { email });
+        alert(data.message);
+        router.push(`/verify?email=${email}`);
+    } catch (error: any) {
+        alert(error.response.data.message);
+    } finally {
+        setLoading(false);
+    }
+
+  }
+
   return (
     <div className='min-h-screen bg-gray-900 flex items-center justify-center p-4'>
         <div className="max-w-md w-full">
@@ -16,10 +39,18 @@ const LoginPage = () => {
                     </h1>
                     <p className='text-gray-300 text-lg'>Enter your email to continue your journey</p>
                 </div>
-                <form className='space-y-6'>
+                <form className='space-y-6' onSubmit={handleSubmit}>
                     <div>
                         <label htmlFor="email" className='block text-sm font-medium text-gray-300 mb-2'>Email Address</label>
-                        <input type="email" id="email" className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500' placeholder='Enter your email' required />
+                        <input type="email" 
+                        id="email" 
+                        className='w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white 
+                        placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500' 
+                        placeholder='Enter your email' 
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        />
                     </div>
                     <button type='submit' className='w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed'>
                         <div className='flex items-center justify-center gap-2'>
