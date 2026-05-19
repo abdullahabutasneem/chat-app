@@ -15,7 +15,7 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-        const {data} = await axios.post(`http://localhost:5000/api/user/login`, { email });
+        const {data} = await axios.post(`http://localhost:5000/api/v1/login`, { email });
         alert(data.message);
         router.push(`/verify?email=${email}`);
     } catch (error: any) {
@@ -23,7 +23,6 @@ const LoginPage = () => {
     } finally {
         setLoading(false);
     }
-
   }
 
   return (
