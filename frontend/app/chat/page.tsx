@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import Cookies from 'js-cookie';
-import { ArrowLeft, Loader2, LogOut, MessageCircle, Send } from 'lucide-react';
+import { ArrowLeft, Loader2, LogOut, MessageCircle, Search, Send, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -16,6 +16,12 @@ interface Participant {
 interface ChatListEntry {
     user: { _id: string; name: string; email?: string };
     chat: { _id: string; unseenCount?: number };
+}
+
+interface DirectoryUser {
+    _id: string;
+    name: string;
+    email?: string;
 }
 
 const formatUnseen = (n: number): string => (n > 99 ? '99+' : String(n));
@@ -61,6 +67,10 @@ const ChatApp = () => {
     const [messagesLoading, setMessagesLoading] = useState<boolean>(false);
     const [draft, setDraft] = useState<string>('');
     const [sending, setSending] = useState<boolean>(false);
+    const [searchQuery, setSearchQuery] = useState<string>('');
+    const [directory, setDirectory] = useState<DirectoryUser[]>([]);
+    const [searching, setSearching] = useState<boolean>(false);
+    const [openingChatWith, setOpeningChatWith] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
     const handleLogout = (): void => {
@@ -168,6 +178,96 @@ const ChatApp = () => {
     };
 
     useEffect(() => {
+        const q = searchQuery.trim();
+        if (!q || directory.length > 0 || searching) return;
+        const token = Cookies.get('token');
+        if (!token) {
+            router.replace('/login');
+            return;
+        }
+        setSearching(true);
+        axios
+            .get('http://localhost:5000/api/v1/user/all', {
+                headers: { Authorization: `Bearer ${token}` },
+            })
+            .then(({ data }) => {
+                const list: DirectoryUser[] = Array.isArray(data) ? data : data?.users || [];
+                setDirectory(list);
+            })
+            .catch((error: any) => {
+                if (error?.response?.status === 401) {
+                    router.replace('/login');
+                } else {
+                    console.error('Failed to load users:', error);
+                    alert(
+                        error?.response?.data?.message ||
+                            error?.message ||
+                            'Failed to load users. Check the browser console.'
+                    );
+                }
+            })
+            .finally(() => setSearching(false));
+    }, [searchQuery, directory.length, searching, router]);
+
+    const searchResults = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return [] as DirectoryUser[];
+        return directory
+            .filter((u) => u._id !== currentUserId)
+            .filter(
+                (u) =>
+                    u.name?.toLowerCase().includes(q) ||
+                    u.email?.toLowerCase().includes(q)
+            )
+            .slice(0, 20);
+    }, [searchQuery, directory, currentUserId]);
+
+    const startChatWith = async (other: DirectoryUser): Promise<void> => {
+        if (openingChatWith) return;
+        const token = Cookies.get('token');
+        if (!token) {
+            router.replace('/login');
+            return;
+        }
+        setOpeningChatWith(other._id);
+        try {
+            const { data } = await axios.post(
+                'http://localhost:5002/api/v1/chat/new',
+                { otherUserId: other._id },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            const chatId: string | undefined = data?.chatId;
+            if (!chatId) throw new Error('No chatId returned');
+
+            setParticipants((prev) => {
+                if (prev.some((p) => p.id === chatId)) return prev;
+                const fresh: Participant = {
+                    id: chatId,
+                    name: other.name,
+                    email: other.email,
+                    unseenCount: 0,
+                };
+                return [fresh, ...prev];
+            });
+            setSearchQuery('');
+            setSelectedId(chatId);
+        } catch (error: any) {
+            if (error?.response?.status === 401) {
+                router.replace('/login');
+            } else {
+                console.error('Failed to open chat:', error);
+                alert(
+                    error?.response?.data?.message ||
+                        error?.message ||
+                        'Could not open chat. Check the browser console.'
+                );
+            }
+        } finally {
+            setOpeningChatWith(null);
+        }
+    };
+
+    useEffect(() => {
         if (!selectedId) {
             setMessages([]);
             return;
@@ -253,8 +353,89 @@ const ChatApp = () => {
                 </button>
             </div>
 
+            <div className='px-4 py-3 border-b border-gray-700'>
+                <div className='relative'>
+                    <Search
+                        size={16}
+                        className='absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none'
+                    />
+                    <input
+                        type='text'
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder='Search people to chat with'
+                        className='w-full pl-9 pr-9 py-2 bg-gray-700/70 border border-gray-600
+                        rounded-full text-sm text-white placeholder-gray-400
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                    />
+                    {searchQuery && (
+                        <button
+                            type='button'
+                            onClick={() => setSearchQuery('')}
+                            className='absolute right-2 top-1/2 -translate-y-1/2 text-gray-400
+                            hover:text-white p-1 rounded-full'
+                            aria-label='Clear search'
+                        >
+                            <X size={14} />
+                        </button>
+                    )}
+                </div>
+            </div>
+
             <div className='flex-1 overflow-y-auto'>
-                {loading ? (
+                {searchQuery.trim() ? (
+                    searching && directory.length === 0 ? (
+                        <div className='h-full flex items-center justify-center'>
+                            <Loader2 className='w-6 h-6 text-blue-500 animate-spin' />
+                        </div>
+                    ) : searchResults.length === 0 ? (
+                        <div className='h-full flex flex-col items-center justify-center text-center px-6'>
+                            <Search className='w-8 h-8 text-gray-500 mb-2' />
+                            <p className='text-gray-400 text-sm'>
+                                No people match &ldquo;{searchQuery}&rdquo;
+                            </p>
+                        </div>
+                    ) : (
+                        <ul>
+                            <li className='px-5 pt-3 pb-1 text-[11px] uppercase tracking-wider text-gray-500'>
+                                Suggestions
+                            </li>
+                            {searchResults.map((u) => {
+                                const busy = openingChatWith === u._id;
+                                return (
+                                    <li key={u._id}>
+                                        <button
+                                            disabled={busy}
+                                            onClick={() => startChatWith(u)}
+                                            className='w-full flex items-center gap-3 px-5 py-3 text-left
+                                            border-b border-gray-700/60 transition
+                                            hover:bg-gray-700/60 disabled:opacity-60
+                                            disabled:cursor-not-allowed'
+                                        >
+                                            <div className='w-11 h-11 rounded-full bg-emerald-600 text-white
+                                            flex items-center justify-center font-semibold shrink-0'>
+                                                {getInitials(u.name)}
+                                            </div>
+                                            <div className='min-w-0 flex-1'>
+                                                <p className='text-white font-medium truncate'>
+                                                    {u.name}
+                                                </p>
+                                                {u.email && (
+                                                    <p className='text-xs text-gray-400 truncate'>
+                                                        {u.email}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            {busy && (
+                                                <Loader2 className='w-4 h-4 text-blue-400 animate-spin shrink-0' />
+                                            )}
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )
+                ) : loading ? (
                     <div className='h-full flex items-center justify-center'>
                         <Loader2 className='w-6 h-6 text-blue-500 animate-spin' />
                     </div>
