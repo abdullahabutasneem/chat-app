@@ -5,6 +5,7 @@ import Cookies from 'js-cookie';
 import { ArrowLeft, ImagePlus, Loader2, LogOut, MessageCircle, Search, Send, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { disconnectSocket, getSocket } from '@/src/lib/socket';
 
 interface Participant {
     id: string;
@@ -78,6 +79,7 @@ const ChatApp = () => {
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
     const handleLogout = (): void => {
+        disconnectSocket();
         Cookies.remove('token');
         try {
             localStorage.removeItem('user');
@@ -86,6 +88,24 @@ const ChatApp = () => {
         }
         router.replace('/login');
     };
+
+    useEffect(() => {
+        const s = getSocket();
+        if (!s) return;
+        const onConnect = () => console.log('[socket] connected', s.id);
+        const onConnectError = (err: Error) =>
+            console.error('[socket] connect_error:', err.message);
+        const onDisconnect = (reason: string) =>
+            console.log('[socket] disconnected:', reason);
+        s.on('connect', onConnect);
+        s.on('connect_error', onConnectError);
+        s.on('disconnect', onDisconnect);
+        return () => {
+            s.off('connect', onConnect);
+            s.off('connect_error', onConnectError);
+            s.off('disconnect', onDisconnect);
+        };
+    }, []);
 
     useEffect(() => {
         try {
