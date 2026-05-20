@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import Cookies from 'js-cookie';
-import { ArrowLeft, Loader2, LogOut, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, LogOut, MessageCircle, Send } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -56,6 +56,8 @@ const ChatApp = () => {
     const [loading, setLoading] = useState<boolean>(true);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [messagesLoading, setMessagesLoading] = useState<boolean>(false);
+    const [draft, setDraft] = useState<string>('');
+    const [sending, setSending] = useState<boolean>(false);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
     const handleLogout = (): void => {
@@ -119,6 +121,47 @@ const ChatApp = () => {
 
         fetchChats();
     }, [router]);
+
+    useEffect(() => {
+        setDraft('');
+    }, [selectedId]);
+
+    const handleSend = async (): Promise<void> => {
+        const text = draft.trim();
+        if (!text || !selectedId || sending) return;
+        const token = Cookies.get('token');
+        if (!token) {
+            router.replace('/login');
+            return;
+        }
+
+        setSending(true);
+        try {
+            const { data } = await axios.post(
+                'http://localhost:5002/api/v1/message',
+                { chatId: selectedId, text },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            const saved: ChatMessage | undefined = data?.message;
+            if (saved) {
+                setMessages((prev) => [...prev, saved]);
+            }
+            setDraft('');
+        } catch (error: any) {
+            if (error?.response?.status === 401) {
+                router.replace('/login');
+            } else {
+                console.error('Failed to send message:', error);
+                alert(
+                    error?.response?.data?.message ||
+                        error?.message ||
+                        'Failed to send message. Check the browser console.'
+                );
+            }
+        } finally {
+            setSending(false);
+        }
+    };
 
     useEffect(() => {
         if (!selectedId) {
@@ -338,6 +381,48 @@ const ChatApp = () => {
                             </ul>
                         )}
                     </div>
+
+                    <form
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            handleSend();
+                        }}
+                        className='border-t border-gray-700 bg-gray-800 px-4 py-3'
+                    >
+                        <div className='flex items-end gap-2'>
+                            <textarea
+                                value={draft}
+                                onChange={(e) => setDraft(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        handleSend();
+                                    }
+                                }}
+                                rows={1}
+                                placeholder={`Message ${selected.name}`}
+                                disabled={sending}
+                                className='flex-1 resize-none max-h-32 px-4 py-2 bg-gray-700
+                                border border-gray-600 rounded-2xl text-white placeholder-gray-400
+                                focus:outline-none focus:ring-2 focus:ring-blue-500
+                                disabled:opacity-50 disabled:cursor-not-allowed'
+                            />
+                            <button
+                                type='submit'
+                                disabled={!draft.trim() || sending}
+                                className='w-10 h-10 shrink-0 rounded-full bg-blue-600 hover:bg-blue-700
+                                text-white flex items-center justify-center
+                                disabled:opacity-50 disabled:cursor-not-allowed transition'
+                                aria-label='Send'
+                            >
+                                {sending ? (
+                                    <Loader2 size={18} className='animate-spin' />
+                                ) : (
+                                    <Send size={18} />
+                                )}
+                            </button>
+                        </div>
+                    </form>
                 </>
             ) : (
                 <div className='flex-1 flex flex-col items-center justify-center px-6 text-center'>
