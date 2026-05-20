@@ -1,6 +1,8 @@
 'use client';
 
-import { ArrowLeft, MessageCircle } from 'lucide-react';
+import Cookies from 'js-cookie';
+import { ArrowLeft, LogOut, MessageCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import React, { useEffect, useMemo, useState } from 'react';
 
 interface Participant {
@@ -23,8 +25,19 @@ const getInitials = (name: string): string => {
 };
 
 const ChatApp = () => {
+    const router = useRouter();
     const [username, setUsername] = useState<string>('');
     const [selectedId, setSelectedId] = useState<string | null>(null);
+
+    const handleLogout = (): void => {
+        Cookies.remove('token');
+        try {
+            localStorage.removeItem('user');
+        } catch {
+            // ignore
+        }
+        router.replace('/login');
+    };
 
     useEffect(() => {
         try {
@@ -49,11 +62,25 @@ const ChatApp = () => {
                 selectedId ? 'hidden md:flex' : 'flex'
             } flex-col w-full md:w-80 lg:w-96 bg-gray-800 border-r border-gray-700 h-screen`}
         >
-            <div className='px-5 py-4 border-b border-gray-700'>
-                <h2 className='text-xl font-semibold text-white'>Chats</h2>
-                {username && (
-                    <p className='text-sm text-gray-400 mt-0.5'>Signed in as {username}</p>
-                )}
+            <div className='px-5 py-4 border-b border-gray-700 flex items-start justify-between gap-3'>
+                <div className='min-w-0'>
+                    <h2 className='text-xl font-semibold text-white'>Chats</h2>
+                    {username && (
+                        <p className='text-sm text-gray-400 mt-0.5 truncate'>
+                            Signed in as {username}
+                        </p>
+                    )}
+                </div>
+                <button
+                    onClick={handleLogout}
+                    className='inline-flex items-center gap-1.5 text-sm text-gray-300 hover:text-white
+                    bg-gray-700/60 hover:bg-gray-700 border border-gray-600 px-3 py-1.5 rounded-md
+                    transition shrink-0'
+                    aria-label='Log out'
+                >
+                    <LogOut size={16} />
+                    <span className='hidden sm:inline'>Logout</span>
+                </button>
             </div>
 
             <div className='flex-1 overflow-y-auto'>
