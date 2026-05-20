@@ -1,7 +1,8 @@
 'use client';
 
+import axios from 'axios';
 import Cookies from 'js-cookie';
-import { ArrowLeft, LogOut, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, LogOut, MessageCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useMemo, useState } from 'react';
 
@@ -11,11 +12,10 @@ interface Participant {
     email?: string;
 }
 
-// Placeholder participants — just so the layout is visible.
-// Will be replaced by data from the backend when fetching is wired up.
-const placeholderParticipants: Participant[] = [
-    
-];
+interface ChatListEntry {
+    user: { _id: string; name: string; email?: string };
+    chat: { _id: string };
+}
 
 const getInitials = (name: string): string => {
     if (!name) return '?';
@@ -28,6 +28,8 @@ const ChatApp = () => {
     const router = useRouter();
     const [username, setUsername] = useState<string>('');
     const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [participants, setParticipants] = useState<Participant[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
 
     const handleLogout = (): void => {
         Cookies.remove('token');
@@ -51,9 +53,48 @@ const ChatApp = () => {
         }
     }, []);
 
+    useEffect(() => {
+        const token = Cookies.get('token');
+        if (!token) {
+            router.replace('/login');
+            return;
+        }
+
+        const fetchChats = async () => {
+            try {
+                const { data } = await axios.get(
+                    'http://localhost:5002/api/v1/chat/all',
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+                const entries: ChatListEntry[] = data?.chats || [];
+                const mapped: Participant[] = entries.map((e) => ({
+                    id: e.chat._id,
+                    name: e.user?.name || 'Unknown',
+                    email: e.user?.email,
+                }));
+                setParticipants(mapped);
+            } catch (error: any) {
+                if (error?.response?.status === 401) {
+                    router.replace('/login');
+                } else {
+                    console.error('Failed to load chats:', error);
+                    alert(
+                        error?.response?.data?.message ||
+                            error?.message ||
+                            'Failed to load chats. Check the browser console.'
+                    );
+                }
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchChats();
+    }, [router]);
+
     const selected = useMemo(
-        () => placeholderParticipants.find((p) => p.id === selectedId) || null,
-        [selectedId]
+        () => participants.find((p) => p.id === selectedId) || null,
+        [participants, selectedId]
     );
 
     const Sidebar = (
@@ -84,36 +125,47 @@ const ChatApp = () => {
             </div>
 
             <div className='flex-1 overflow-y-auto'>
-                <ul>
-                    {placeholderParticipants.map((p) => {
-                        const active = p.id === selectedId;
-                        return (
-                            <li key={p.id}>
-                                <button
-                                    onClick={() => setSelectedId(p.id)}
-                                    className={`w-full flex items-center gap-3 px-5 py-3 text-left
-                                    border-b border-gray-700/60 transition
-                                    ${active ? 'bg-gray-700' : 'hover:bg-gray-700/60'}`}
-                                >
-                                    <div className='w-11 h-11 rounded-full bg-blue-600 text-white
-                                    flex items-center justify-center font-semibold shrink-0'>
-                                        {getInitials(p.name)}
-                                    </div>
-                                    <div className='min-w-0 flex-1'>
-                                        <p className='text-white font-medium truncate'>
-                                            {p.name}
-                                        </p>
-                                        {p.email && (
-                                            <p className='text-xs text-gray-400 truncate'>
-                                                {p.email}
+                {loading ? (
+                    <div className='h-full flex items-center justify-center'>
+                        <Loader2 className='w-6 h-6 text-blue-500 animate-spin' />
+                    </div>
+                ) : participants.length === 0 ? (
+                    <div className='h-full flex flex-col items-center justify-center text-center px-6'>
+                        <MessageCircle className='w-10 h-10 text-gray-500 mb-3' />
+                        <p className='text-gray-400 text-sm'>No conversations yet</p>
+                    </div>
+                ) : (
+                    <ul>
+                        {participants.map((p) => {
+                            const active = p.id === selectedId;
+                            return (
+                                <li key={p.id}>
+                                    <button
+                                        onClick={() => setSelectedId(p.id)}
+                                        className={`w-full flex items-center gap-3 px-5 py-3 text-left
+                                        border-b border-gray-700/60 transition
+                                        ${active ? 'bg-gray-700' : 'hover:bg-gray-700/60'}`}
+                                    >
+                                        <div className='w-11 h-11 rounded-full bg-blue-600 text-white
+                                        flex items-center justify-center font-semibold shrink-0'>
+                                            {getInitials(p.name)}
+                                        </div>
+                                        <div className='min-w-0 flex-1'>
+                                            <p className='text-white font-medium truncate'>
+                                                {p.name}
                                             </p>
-                                        )}
-                                    </div>
-                                </button>
-                            </li>
-                        );
-                    })}
-                </ul>
+                                            {p.email && (
+                                                <p className='text-xs text-gray-400 truncate'>
+                                                    {p.email}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </button>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
             </div>
         </aside>
     );
