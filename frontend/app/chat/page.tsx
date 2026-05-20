@@ -10,12 +10,15 @@ interface Participant {
     id: string;
     name: string;
     email?: string;
+    unseenCount: number;
 }
 
 interface ChatListEntry {
     user: { _id: string; name: string; email?: string };
-    chat: { _id: string };
+    chat: { _id: string; unseenCount?: number };
 }
+
+const formatUnseen = (n: number): string => (n > 99 ? '99+' : String(n));
 
 interface ChatMessage {
     _id: string;
@@ -101,6 +104,7 @@ const ChatApp = () => {
                     id: e.chat._id,
                     name: e.user?.name || 'Unknown',
                     email: e.user?.email,
+                    unseenCount: e.chat?.unseenCount ?? 0,
                 }));
                 setParticipants(mapped);
             } catch (error: any) {
@@ -173,6 +177,10 @@ const ChatApp = () => {
             router.replace('/login');
             return;
         }
+
+        setParticipants((prev) =>
+            prev.map((p) => (p.id === selectedId ? { ...p, unseenCount: 0 } : p))
+        );
 
         let cancelled = false;
         setMessagesLoading(true);
@@ -272,9 +280,24 @@ const ChatApp = () => {
                                             {getInitials(p.name)}
                                         </div>
                                         <div className='min-w-0 flex-1'>
-                                            <p className='text-white font-medium truncate'>
-                                                {p.name}
-                                            </p>
+                                            <div className='flex items-center gap-2'>
+                                                <p className='text-white font-medium truncate flex-1'>
+                                                    {p.name}
+                                                </p>
+                                                {p.unseenCount > 0 && (
+                                                    <span
+                                                        className='shrink-0 min-w-[22px] h-[22px] px-1.5
+                                                        inline-flex items-center justify-center
+                                                        text-[11px] font-bold text-white rounded-full
+                                                        bg-gradient-to-br from-red-500 to-rose-600
+                                                        shadow-[0_0_0_2px_rgba(239,68,68,0.15),0_4px_12px_-2px_rgba(239,68,68,0.6)]
+                                                        ring-1 ring-red-400/40 animate-pulse'
+                                                        aria-label={`${p.unseenCount} unread messages`}
+                                                    >
+                                                        {formatUnseen(p.unseenCount)}
+                                                    </span>
+                                                )}
+                                            </div>
                                             {p.email && (
                                                 <p className='text-xs text-gray-400 truncate'>
                                                     {p.email}
