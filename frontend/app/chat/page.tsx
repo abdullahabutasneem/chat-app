@@ -4,7 +4,7 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 import { ArrowLeft, Loader2, LogOut, MessageCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 interface Participant {
     id: string;
@@ -17,6 +17,29 @@ interface ChatListEntry {
     chat: { _id: string };
 }
 
+interface ChatMessage {
+    _id: string;
+    chatId: string;
+    sender: string;
+    text?: string;
+    image?: { url: string; publicId: string };
+    messageType: 'text' | 'image';
+    seen: boolean;
+    seenAt?: string | null;
+    createdAt: string;
+}
+
+const formatTimestamp = (iso: string): string => {
+    try {
+        return new Date(iso).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    } catch {
+        return '';
+    }
+};
+
 const getInitials = (name: string): string => {
     if (!name) return '?';
     const parts = name.trim().split(/\s+/);
@@ -27,9 +50,13 @@ const getInitials = (name: string): string => {
 const ChatApp = () => {
     const router = useRouter();
     const [username, setUsername] = useState<string>('');
+    const [currentUserId, setCurrentUserId] = useState<string>('');
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [participants, setParticipants] = useState<Participant[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [messagesLoading, setMessagesLoading] = useState<boolean>(false);
+    const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
     const handleLogout = (): void => {
         Cookies.remove('token');
@@ -47,6 +74,7 @@ const ChatApp = () => {
             if (stored) {
                 const parsed = JSON.parse(stored);
                 if (parsed?.name) setUsername(parsed.name);
+                if (parsed?._id) setCurrentUserId(parsed._id);
             }
         } catch {
             // ignore
@@ -91,6 +119,56 @@ const ChatApp = () => {
 
         fetchChats();
     }, [router]);
+
+    useEffect(() => {
+        if (!selectedId) {
+            setMessages([]);
+            return;
+        }
+        const token = Cookies.get('token');
+        if (!token) {
+            router.replace('/login');
+            return;
+        }
+
+        let cancelled = false;
+        setMessagesLoading(true);
+        setMessages([]);
+
+        const fetchMessages = async () => {
+            try {
+                const { data } = await axios.get(
+                    `http://localhost:5002/api/v1/message/${selectedId}`,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+                if (cancelled) return;
+                setMessages(data?.messages || []);
+            } catch (error: any) {
+                if (cancelled) return;
+                if (error?.response?.status === 401) {
+                    router.replace('/login');
+                } else {
+                    console.error('Failed to load messages:', error);
+                    alert(
+                        error?.response?.data?.message ||
+                            error?.message ||
+                            'Failed to load messages. Check the browser console.'
+                    );
+                }
+            } finally {
+                if (!cancelled) setMessagesLoading(false);
+            }
+        };
+
+        fetchMessages();
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedId, router]);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages]);
 
     const selected = useMemo(
         () => participants.find((p) => p.id === selectedId) || null,
@@ -197,7 +275,69 @@ const ChatApp = () => {
                             )}
                         </div>
                     </div>
-                    <div className='flex-1' />
+
+                    <div className='flex-1 overflow-y-auto px-4 py-4'>
+                        {messagesLoading ? (
+                            <div className='h-full flex items-center justify-center'>
+                                <Loader2 className='w-6 h-6 text-blue-500 animate-spin' />
+                            </div>
+                        ) : messages.length === 0 ? (
+                            <div className='h-full flex items-center justify-center text-center'>
+                                <p className='text-gray-500 text-sm'>
+                                    No messages yet. Say hi to {selected.name}.
+                                </p>
+                            </div>
+                        ) : (
+                            <ul className='space-y-2'>
+                                {messages.map((m) => {
+                                    const mine = m.sender === currentUserId;
+                                    return (
+                                        <li
+                                            key={m._id}
+                                            className={`flex ${
+                                                mine ? 'justify-end' : 'justify-start'
+                                            }`}
+                                        >
+                                            <div
+                                                className={`max-w-[75%] sm:max-w-[65%] rounded-2xl px-4 py-2
+                                                ${
+                                                    mine
+                                                        ? 'bg-blue-600 text-white rounded-br-md'
+                                                        : 'bg-gray-700 text-gray-100 rounded-bl-md'
+                                                }`}
+                                            >
+                                                {m.messageType === 'image' && m.image?.url && (
+                                                    <img
+                                                        src={m.image.url}
+                                                        alt='attachment'
+                                                        className='rounded-lg max-w-full mb-1'
+                                                    />
+                                                )}
+                                                {m.text && (
+                                                    <p className='whitespace-pre-wrap break-words text-[15px]'>
+                                                        {m.text}
+                                                    </p>
+                                                )}
+                                                <p
+                                                    className={`text-[10px] mt-1 ${
+                                                        mine ? 'text-blue-100/80' : 'text-gray-400'
+                                                    } text-right`}
+                                                >
+                                                    {formatTimestamp(m.createdAt)}
+                                                    {mine && (
+                                                        <span className='ml-1'>
+                                                            {m.seen ? '✓✓' : '✓'}
+                                                        </span>
+                                                    )}
+                                                </p>
+                                            </div>
+                                        </li>
+                                    );
+                                })}
+                                <div ref={messagesEndRef} />
+                            </ul>
+                        )}
+                    </div>
                 </>
             ) : (
                 <div className='flex-1 flex flex-col items-center justify-center px-6 text-center'>
