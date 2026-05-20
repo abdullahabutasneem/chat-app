@@ -70,6 +70,7 @@ const ChatApp = () => {
     const [attachment, setAttachment] = useState<File | null>(null);
     const [attachmentPreview, setAttachmentPreview] = useState<string>('');
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const draftInputRef = useRef<HTMLTextAreaElement | null>(null);
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [directory, setDirectory] = useState<DirectoryUser[]>([]);
     const [searching, setSearching] = useState<boolean>(false);
@@ -205,6 +206,7 @@ const ChatApp = () => {
             }
             setDraft('');
             setAttachment(null);
+            requestAnimationFrame(() => draftInputRef.current?.focus());
         } catch (error: any) {
             if (error?.response?.status === 401) {
                 router.replace('/login');
@@ -688,6 +690,7 @@ const ChatApp = () => {
                                 <ImagePlus size={18} />
                             </button>
                             <textarea
+                                ref={draftInputRef}
                                 value={draft}
                                 onChange={(e) => setDraft(e.target.value)}
                                 onKeyDown={(e) => {
