@@ -2,7 +2,7 @@
 
 import axios from 'axios';
 import Cookies from 'js-cookie';
-import { ArrowLeft, Loader2, LogOut, MessageCircle, Search, Send, X } from 'lucide-react';
+import { ArrowLeft, ImagePlus, Loader2, LogOut, MessageCircle, Search, Send, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -67,6 +67,9 @@ const ChatApp = () => {
     const [messagesLoading, setMessagesLoading] = useState<boolean>(false);
     const [draft, setDraft] = useState<string>('');
     const [sending, setSending] = useState<boolean>(false);
+    const [attachment, setAttachment] = useState<File | null>(null);
+    const [attachmentPreview, setAttachmentPreview] = useState<string>('');
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [directory, setDirectory] = useState<DirectoryUser[]>([]);
     const [searching, setSearching] = useState<boolean>(false);
@@ -138,11 +141,38 @@ const ChatApp = () => {
 
     useEffect(() => {
         setDraft('');
+        setAttachment(null);
+        setAttachmentPreview('');
     }, [selectedId]);
+
+    useEffect(() => {
+        if (!attachment) {
+            setAttachmentPreview('');
+            return;
+        }
+        const url = URL.createObjectURL(attachment);
+        setAttachmentPreview(url);
+        return () => URL.revokeObjectURL(url);
+    }, [attachment]);
+
+    const handlePickFile = (e: React.ChangeEvent<HTMLInputElement>): void => {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            alert('Only image files are supported.');
+            return;
+        }
+        setAttachment(file);
+    };
+
+    const clearAttachment = (): void => {
+        setAttachment(null);
+    };
 
     const handleSend = async (): Promise<void> => {
         const text = draft.trim();
-        if (!text || !selectedId || sending) return;
+        if ((!text && !attachment) || !selectedId || sending) return;
         const token = Cookies.get('token');
         if (!token) {
             router.replace('/login');
@@ -151,16 +181,30 @@ const ChatApp = () => {
 
         setSending(true);
         try {
-            const { data } = await axios.post(
-                'http://localhost:5002/api/v1/message',
-                { chatId: selectedId, text },
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
-            const saved: ChatMessage | undefined = data?.message;
+            let response;
+            if (attachment) {
+                const form = new FormData();
+                form.append('chatId', selectedId);
+                if (text) form.append('text', text);
+                form.append('image', attachment);
+                response = await axios.post(
+                    'http://localhost:5002/api/v1/message',
+                    form,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+            } else {
+                response = await axios.post(
+                    'http://localhost:5002/api/v1/message',
+                    { chatId: selectedId, text },
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+            }
+            const saved: ChatMessage | undefined = response.data?.message;
             if (saved) {
                 setMessages((prev) => [...prev, saved]);
             }
             setDraft('');
+            setAttachment(null);
         } catch (error: any) {
             if (error?.response?.status === 401) {
                 router.replace('/login');
@@ -593,7 +637,56 @@ const ChatApp = () => {
                         }}
                         className='border-t border-gray-700 bg-gray-800 px-4 py-3'
                     >
+                        {attachment && attachmentPreview && (
+                            <div className='mb-2 flex items-center gap-3 bg-gray-700/60 border
+                            border-gray-600 rounded-xl p-2 pr-3'>
+                                <img
+                                    src={attachmentPreview}
+                                    alt='preview'
+                                    className='w-14 h-14 rounded-lg object-cover border border-gray-600 shrink-0'
+                                />
+                                <div className='min-w-0 flex-1'>
+                                    <p className='text-sm text-white truncate'>
+                                        {attachment.name}
+                                    </p>
+                                    <p className='text-xs text-gray-400'>
+                                        {(attachment.size / 1024).toFixed(1)} KB
+                                    </p>
+                                </div>
+                                <button
+                                    type='button'
+                                    onClick={clearAttachment}
+                                    disabled={sending}
+                                    className='shrink-0 w-7 h-7 rounded-full bg-gray-600/70 hover:bg-gray-600
+                                    text-gray-200 hover:text-white flex items-center justify-center
+                                    disabled:opacity-50'
+                                    aria-label='Remove attachment'
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        )}
                         <div className='flex items-end gap-2'>
+                            <input
+                                ref={fileInputRef}
+                                type='file'
+                                accept='image/*'
+                                onChange={handlePickFile}
+                                className='hidden'
+                            />
+                            <button
+                                type='button'
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={sending}
+                                className='w-10 h-10 shrink-0 rounded-full bg-gray-700/70 hover:bg-gray-700
+                                text-gray-300 hover:text-white border border-gray-600
+                                flex items-center justify-center transition
+                                disabled:opacity-50 disabled:cursor-not-allowed'
+                                aria-label='Attach image'
+                                title='Attach image'
+                            >
+                                <ImagePlus size={18} />
+                            </button>
                             <textarea
                                 value={draft}
                                 onChange={(e) => setDraft(e.target.value)}
@@ -604,7 +697,11 @@ const ChatApp = () => {
                                     }
                                 }}
                                 rows={1}
-                                placeholder={`Message ${selected.name}`}
+                                placeholder={
+                                    attachment
+                                        ? 'Add a caption (optional)'
+                                        : `Message ${selected.name}`
+                                }
                                 disabled={sending}
                                 className='flex-1 resize-none max-h-32 px-4 py-2 bg-gray-700
                                 border border-gray-600 rounded-2xl text-white placeholder-gray-400
@@ -613,7 +710,7 @@ const ChatApp = () => {
                             />
                             <button
                                 type='submit'
-                                disabled={!draft.trim() || sending}
+                                disabled={(!draft.trim() && !attachment) || sending}
                                 className='w-10 h-10 shrink-0 rounded-full bg-blue-600 hover:bg-blue-700
                                 text-white flex items-center justify-center
                                 disabled:opacity-50 disabled:cursor-not-allowed transition'
